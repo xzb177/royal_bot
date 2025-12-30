@@ -1,0 +1,17 @@
+[Unit]
+Description=Royal Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+# 设置工作目录为项目根目录
+WorkingDirectory=/root/royal_bot
+# 指定环境变量文件
+EnvironmentFile=/root/royal_bot/.env
+# 关键修改：用 -m 模式启动，这样 Python 就能看懂 .config 这种写法了
+ExecStart=/usr/bin/python3 -m royal_bot.bot
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
