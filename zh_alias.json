@@ -1,0 +1,11 @@
+{
+  "菜单": "menu",
+  "帮助": "menu",
+  "绑定": {"cmd": "bind", "take_args": true},
+  "签到": "daily",
+  "我的": "me",
+  "审核": "requests",
+  "请求": "requests",
+  "通过": {"cmd": "approve", "take_args": true},
+  "拒绝": {"cmd": "reject", "take_args": true}
+}

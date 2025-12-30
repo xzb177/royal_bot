@@ -1,0 +1,17 @@
+[Unit]
+Description=Royal Bot 2.0 (Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/royal_bot
+EnvironmentFile=/root/royal_bot/.env
+ExecStart=/usr/bin/python3 /root/royal_bot/app.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
