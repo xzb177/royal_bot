@@ -1,100 +1,37 @@
 # -*- coding: utf-8 -*-
 import sqlite3
-from telegram.ext import CommandHandler
+from telegram.ext import CommandHandler, MessageHandler, filters
 
-def _get_level_title(xp):
-    if xp >= 20000: return "👸 绝美公主"
-    if xp >= 8000:  return "🧚‍♀️ 梦幻精灵"
-    if xp >= 2000:  return "🎀 甜心宝贝"
-    if xp >= 500:   return "🌸 可爱萌新"
-    return "🥚 迷糊小蛋"
+DB_PATH = "/root/royal_bot/royal.db"
 
-def get_conn(path):
-    return sqlite3.connect(path, check_same_thread=False)
+async def me_handler(u, c):
+    user = u.effective_user
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        # 严格对齐所有字段
+        cur.execute("SELECT emby_account, is_vip, win, lost, points, level, sign_in_days, ssr_count, sr_count, r_count FROM bindings WHERE tg_id = ?", (user.id,))
+        row = cur.fetchone()
+        conn.close()
+        
+        acc, is_v, w, l, p, lv, days, ssr, sr, r = row if row else ("未签订", 0, 0, 0, 0, 1, 0, 0, 0, 0)
+        status = "💎 皇家圣殿·大祭司 (VIP)" if is_v == 1 else "📜 见习魔法师 (普通)"
+        
+        text = (
+            f"🌸─── <b>{user.first_name} 的魔法手账</b> ───🌸\n\n"
+            f"✨ <b>位阶：</b> {status}\n"
+            f"🐾 <b>等级：</b> Lv.{lv}  |  💕 <b>灵力：</b> {p}\n"
+            f"🗓️ <b>祈愿天数：</b> {days} Day\n\n"
+            f"⚔️ <b>战绩：</b> {w}胜 / {l}败\n\n"
+            f"🎒 <b>小魔女的手包袋</b>\n"
+            f"└ 🌟 SSR: {ssr}  💖 SR: {sr}  🍬 R: {r}\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"✨ <i>输入 “祈愿” 或 “寻宝” 开启魔法之旅吧！</i>"
+        )
+        await u.message.reply_html(text)
+    except Exception as e:
+        await u.message.reply_text(f"⚠️ 档案故障：{str(e)}")
 
 def register(app, ctx):
-    cfg = ctx["cfg"]
-    ui = ctx["ui"]
-    db_path = cfg.DB_FILE
-
-    async def me(update, context):
-        u = update.effective_user
-        uid = u.id
-
-        # 默认数据
-        xp, streak = 0, 0
-        w_count, l_count = 0, 0
-        emby_account = "未绑定"
-        active_title = "(无)"
-        counts = {'LEGENDARY': 0, 'EPIC': 0, 'RARE': 0, 'COMMON': 0}
-        identity_status = "👻 游荡幽灵 (未绑定)"
-
-        try:
-            with get_conn(db_path) as conn:
-                cur = conn.cursor()
-                try: cur.execute("ALTER TABLE user_stats ADD COLUMN duels_lost INTEGER DEFAULT 0")
-                except: pass
-
-                cur.execute("SELECT xp, streak, duels_won, duels_lost FROM user_stats WHERE tg_id=?", (uid,))
-                row = cur.fetchone()
-                if row: xp, streak, w_count, l_count = row
-                if not w_count: w_count = 0
-                if not l_count: l_count = 0
-                
-                cur.execute("SELECT emby_id, is_vip FROM bindings WHERE tg_id=?", (uid,))
-                b_row = cur.fetchone()
-                if b_row:
-                    emby_account = b_row[0]
-                    is_vip = b_row[1]
-                    identity_status = "💎 圣殿契约者 (VIP)" if is_vip == 1 else "📜 见习魔法师 (普通)"
-
-                try:
-                    cur.execute("SELECT active_title FROM user_cosmetics WHERE tg_id=?", (uid,))
-                    t_row = cur.fetchone()
-                    if t_row: active_title = t_row[0]
-                except: pass
-
-                try:
-                    cur.execute("SELECT rarity, COUNT(*) FROM user_posters WHERE user_id=? GROUP BY rarity", (uid,))
-                    for rarity, count in cur.fetchall():
-                        counts[rarity] = count
-                except: pass
-
-        except Exception as e:
-            await update.effective_message.reply_text(f"💦 面板卡住了: {e}")
-            return
-
-        total_duels = w_count + l_count
-        win_rate = int((w_count / total_duels) * 100) if total_duels > 0 else 0
-        rate_str = f"{win_rate}%" if total_duels > 0 else "0% (暂无战绩)"
-
-        lines = [
-            f"👤 <b>{u.first_name} 的魔法档案</b>",
-            "",
-            f"🌟 <b>资质认证: {identity_status}</b>",
-            f"📺 绑定账号: <code>{emby_account}</code>",
-            "",
-            f"🏷️ 等级: <b>{_get_level_title(xp)}</b>",
-            f"👑 称号: <b>{active_title}</b>",
-            "",
-            f"🌸 心愿值: <b>{xp}</b>",
-            f"📅 连续祈愿: <b>{streak} 天</b>",
-            "",
-            "⚔️ <b>切磋战绩</b>",
-            f"🏆 胜场: <b>{w_count}</b>   🤕 败场: <b>{l_count}</b>",
-            f"📊 胜率: <b>{rate_str}</b>",
-            "",
-            "🎒 <b>收藏袋</b>",
-            f"🌟 SSR: {counts.get('LEGENDARY',0)}   💖 SR: {counts.get('EPIC',0)}",
-            f"🍬 R: {counts.get('RARE',0)}     🍃 N: {counts.get('COMMON',0)}",
-        ]
-        
-        # === 发送消息 ===
-        sent_msg = await update.effective_message.reply_html(ui.panel("✨ 您的专属名片", lines))
-        
-        # === 🧨 启动自毁 (如果清洁工存在) ===
-        cleaner = context.application.bot_data.get("msg_cleaner")
-        if cleaner:
-            await cleaner(sent_msg)
-
-    app.add_handler(CommandHandler("me", me))
+    app.add_handler(CommandHandler("me", me_handler))
+    app.add_handler(MessageHandler(filters.Regex(r'^(名片|/me)$'), me_handler), group=-1)
